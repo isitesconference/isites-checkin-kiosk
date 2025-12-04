@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Conference QR Check-In (Kiosk Mode – REG ID → Q60)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- QR scanner library -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #0b1020;
+      color: #f5f5f5;
+    }
+    header {
+      background: #101936;
+      color: #fff;
+      padding: 14px 20px;
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    header span.sub {
+      font-size: 12px;
+      font-weight: 400;
+      opacity: 0.8;
+    }
+    .container {
+      display: flex;
+      gap: 16px;
+      padding: 16px;
+      flex-wrap: wrap;
+    }
+    .panel {
+      background: #141b33;
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+    }
+    .left {
+      flex: 2;
+      min-width: 320px;
+    }
+    .right {
+      flex: 1;
+      min-width: 260px;
+      max-width: 360px;
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 18px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    h2 .tag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #1f3a93;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 13px;
+      min-height: 18px;
+    }
+    #status.ok {
+      color: #7cffc1;
+    }
+    #status.error {
+      color: #ff7b88;
+    }
+    .small {
+      font-size: 11px;
+      color: #c0c6e0;
+      margin-top: 6px;
+    }
+    #qr-reader {
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+    }
+    .stat-block {
+      margin-bottom: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #1a2344;
+      font-size: 13px;
+    }
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      opacity: 0.7;
+      margin-bottom: 2px;
+    }
+    .stat-value {
+      font-weight: 600;
+      word-break: break-word;
+    }
+    .log-entry {
+      font-size: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 4px 0;
+    }
+    .log-time {
+      color: #a4aadb;
+      margin-right: 4px;
+    }
+    .log-name {
+      font-weight: 600;
+      color: #e6e9ff;
+    }
+    .pill-ok {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(124,255,193,0.1);
+      color: #7cffc1;
+      border: 1px solid rgba(124,255,193,0.4);
+      margin-left: 4px;
+    }
+    .pill-dupe {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(255,190,92,0.1);
+      color: #ffbe5c;
+      border: 1px solid rgba(255,190,92,0.4);
+      margin-left: 4px;
+    }
+    footer {
+      text-align: center;
+      font-size: 10px;
+      color: #7d84b3;
+      padding: 6px 0 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      ISITES Conference – QR Check-In
+      <span class="sub">REG ID (Q41) → Check-In (Q60) · Jotform-linked</span>
+    </div>
+    <span style="font-size:11px;opacity:.7;">Kiosk Mode</span>
+  </header>
+
+  <div class="container">
+    <!-- Scanner panel -->
+    <div class="panel left">
+      <h2>
+        Scanner
+        <span class="tag">Live</span>
+      </h2>
+      <div id="qr-reader"></div>
+      <div id="status"></div>
+      <div class="small">
+        • QR code should contain <b>REG ID</b> as the first number before a <code>+</code> sign.<br />
+        • Example QR value: <code>12345+any-extra-text</code> → this tool uses <b>12345</b> as REG ID.<br />
+        • REG ID is matched against Jotform field <b>Q41</b>; Check-In field <b>Q60</b> is set to “Checked In”.
+      </div>
+    </div>
+
+    <!-- Info + log panel -->
+    <div class="panel right">
+      <h2>
+        Last Check-In
+        <span class="tag">Summary</span>
+      </h2>
+      <div id="lastCheckin">
+        <div class="small">No check-ins yet. Scan a badge to begin.</div>
+      </div>
+
+      <h2 style="margin-top:18px;">
+        Recent Activity
+        <span class="tag">Log</span>
+      </h2>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <footer>
+    Camera + API are embedded for this specific Jotform form. Rotate device if camera preview looks cropped.
+  </footer>
+
+  <script>
+    // ======== EMBEDDED CONFIG (KIOSK MODE) ========
+    // ⚠️ This key is hard-coded for convenience. Regenerate after conference if needed.
+    const EMBEDDED_API_KEY = "509a7d88f82e8cca3c3fd857cd99ed2e";
+    const FORM_ID = "252042760242144";   // Your Jotform form ID
+    const REG_QID = "41";                // REG ID field (q41)
+    const CHECKIN_QID = "60";            // Check-In field (q60)
+    const TIME_QID = "";                 // Optional: set to e.g. "61" if you add a check-in timestamp field
+
+    const statusEl = document.getElementById("status");
+    const lastCheckinEl = document.getElementById("lastCheckin");
+    const logEl = document.getElementById("log");
+
+    function showStatus(message, type = "") {
+      statusEl.textContent = message;
+      statusEl.className = type ? type : "";
+    }
+
+    function addLogEntry(data) {
+      const div = document.createElement("div");
+      div.className = "log-entry";
+      const now = new Date();
+      const time = now.toLocaleTimeString();
+      const pill = data.duplicate ? '<span class="pill-dupe">Already Checked In</span>' : '<span class="pill-ok">Checked In</span>';
+      div.innerHTML = `
+        <span class="log-time">[${time}]</span>
+        <span class="log-name">${data.name || "Unknown Name"}</span>
+        &mdash; ${data.email || "No email"} (REG ID: ${data.registrationId}) ${pill}
+      `;
+      logEl.prepend(div);
+    }
+
+    function showLastCheckin(data) {
+      lastCheckinEl.innerHTML = `
+        <div class="stat-block">
+          <div class="stat-label">Name</div>
+          <div class="stat-value">${data.name || "Unknown"}</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">Email</div>
+          <div class="stat-value">${data.email || "Unknown"}</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">REG ID</div>
+          <div class="stat-value">${data.registrationId}</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">Submission ID</div>
+          <div class="stat-value">${data.submissionId}</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">Status</div>
+          <div class="stat-value">
+            ${data.statusText}
+            ${data.duplicate ? '<span class="pill-dupe">Duplicate Scan</span>' : '<span class="pill-ok">Checked In</span>'}
+          </div>
+        </div>
+      `;
+    }
+
+    // ======== JOTFORM API HELPERS ========
+
+    async function findSubmissionByRegistrationId(regId) {
+      const fieldName = "q" + REG_QID;
+      const filterObj = {};
+      filterObj[fieldName] = regId;
+      const filterStr = encodeURIComponent(JSON.stringify(filterObj));
+
+      const url = `https://api.jotform.com/form/${FORM_ID}/submissions?apiKey=${encodeURIComponent(EMBEDDED_API_KEY)}&filter=${filterStr}`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error("Failed to search submissions (" + res.status + ")");
+      }
+      const json = await res.json();
+      if (!json.content || !Array.isArray(json.content) || json.content.length === 0) {
+        throw new Error("No submission found for REG ID: " + regId);
+      }
+      return json.content[0];
+    }
+
+    async function markCheckedIn(submission, wasAlreadyChecked) {
+      const submissionId = submission.id;
+      const url = `https://api.jotform.com/submission/${submissionId}?apiKey=${encodeURIComponent(EMBEDDED_API_KEY)}`;
+      const params = new URLSearchParams();
+
+      // Only update check-in field if not already checked
+      if (!wasAlreadyChecked) {
+        params.append(`submission[${CHECKIN_QID}]`, "Checked In");
+      }
+
+      if (TIME_QID) {
+        const nowIso = new Date().toISOString();
+        params.append(`submission[${TIME_QID}]`, nowIso);
+      }
+
+      if ([...params.keys()].length === 0) {
+        // Nothing to update
+        return true;
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        body: params
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error("Failed to update submission: " + res.status + " " + text);
+      }
+      return true;
+    }
+
+    function extractBasicInfo(submission) {
+      let name = "";
+      let email = "";
+      let alreadyChecked = false;
+
+      const answers = submission.answers || {};
+      for (const key of Object.keys(answers)) {
+        const ans = answers[key];
+        if (!ans) continue;
+
+        if (!name && ans.name && ans.answer) {
+          if (typeof ans.answer === "object") {
+            const parts = [];
+            if (ans.answer.first) parts.push(ans.answer.first);
+            if (ans.answer.last) parts.push(ans.answer.last);
+            name = parts.join(" ");
+          } else {
+            name = String(ans.answer);
+          }
+        }
+        if (!email && ans.type === "control_email" && ans.answer) {
+          email = ans.answer;
+        }
+        if (key === CHECKIN_QID && ans.answer) {
+          const val = String(ans.answer).toLowerCase();
+          if (val.includes("checked")) {
+            alreadyChecked = true;
+          }
+        }
+      }
+
+      return {
+        name: name || submission.pretty || "",
+        email,
+        alreadyChecked
+      };
+    }
+
+    // ======== QR SCANNER LOGIC ========
+
+    function onScanSuccess(decodedText, decodedResult) {
+      const raw = decodedText.trim();
+      const registrationId = raw.split("+")[0].trim();  // first token before '+'
+
+      console.log("QR decoded raw:", raw, "→ REG ID parsed:", registrationId);
+
+      if (!registrationId) {
+        showStatus("Error: Could not parse REG ID from QR value: " + raw, "error");
+        return;
+      }
+
+      showStatus(`Scanning… REG ID: ${registrationId}`);
+
+      processCheckInByRegId(registrationId)
+        .catch(err => {
+          console.error(err);
+          showStatus("Error: " + err.message, "error");
+        });
+    }
+
+    async function processCheckInByRegId(registrationId) {
+      try {
+        // 1) Find submission by REG ID
+        const submission = await findSubmissionByRegistrationId(registrationId);
+        const submissionId = submission.id;
+        const info = extractBasicInfo(submission);
+
+        // 2) Mark as Checked-In (or flag as duplicate)
+        await markCheckedIn(submission, info.alreadyChecked);
+
+        const isDup = info.alreadyChecked;
+        const data = {
+          submissionId,
+          registrationId,
+          name: info.name || "(No name)",
+          email: info.email || "(No email)",
+          statusText: isDup ? "Already Checked In" : "Checked In",
+          duplicate: isDup
+        };
+
+        showStatus(
+          isDup
+            ? `⚠ Already checked in earlier: ${data.name} (REG ID: ${registrationId})`
+            : `✔ Checked in: ${data.name} (REG ID: ${registrationId})`,
+          isDup ? "error" : "ok"
+        );
+        showLastCheckin(data);
+        addLogEntry(data);
+      } catch (err) {
+        showStatus("Check-in failed: " + err.message, "error");
+        throw err;
+      }
+    }
+
+    // Initialize scanner when page loads
+    window.addEventListener("load", () => {
+      const html5QrcodeScanner = new Html5QrcodeScanner(
+        "qr-reader",
+        {
+          fps: 10,
+          qrbox: { width: 260, height: 260 }
+        },
+        false
+      );
+      html5QrcodeScanner.render(onScanSuccess);
+    });
+  </script>
+</body>
+</html>
